@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Toast from './components/Toast'
+import { ProtectedRoute, AdminRoute } from './components/ProtectedRoute'
 import { ROUTES } from './routes'
 
 import Home from './pages/Home'
@@ -25,17 +26,20 @@ export default function App() {
         <Route path={ROUTES['home']} element={<Home />} />
         <Route path={ROUTES['login']} element={<Login />} />
         <Route path={ROUTES['register']} element={<Register />} />
-        <Route path={ROUTES['donor-dash']} element={<DonorDashboard />} />
-        <Route path={ROUTES['my-profile']} element={<MyProfile />} />
-        <Route path={ROUTES['settings']} element={<Settings />} />
         <Route path={ROUTES['search']} element={<SearchDonor />} />
-        <Route path={ROUTES['admin-dash']} element={<AdminDashboard />} />
-        <Route path={ROUTES['donor-mgmt']} element={<DonorManagement />} />
-        <Route path={ROUTES['add-donor']} element={<AddDonor />} />
-        <Route path={ROUTES['stock']} element={<BloodStock />} />
         <Route path={ROUTES['donor-stock']} element={<BloodGroups />} />
         <Route path={ROUTES['emergency']} element={<Emergency />} />
         <Route path={ROUTES['about']} element={<About />} />
+
+        <Route path={ROUTES['donor-dash']} element={<ProtectedRoute><DonorDashboard /></ProtectedRoute>} />
+        <Route path={ROUTES['my-profile']} element={<ProtectedRoute><MyProfile /></ProtectedRoute>} />
+        <Route path={ROUTES['settings']} element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+
+        <Route path={ROUTES['admin-dash']} element={<AdminRoute><AdminDashboard /></AdminRoute>} />
+        <Route path={ROUTES['donor-mgmt']} element={<AdminRoute><DonorManagement /></AdminRoute>} />
+        <Route path={ROUTES['add-donor']} element={<AdminRoute><AddDonor /></AdminRoute>} />
+        <Route path={ROUTES['stock']} element={<AdminRoute><BloodStock /></AdminRoute>} />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
