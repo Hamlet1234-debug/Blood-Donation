@@ -14,6 +14,7 @@ import AdminDashboard from './pages/AdminDashboard'
 import DonorManagement from './pages/DonorManagement'
 import AddDonor from './pages/AddDonor'
 import BloodStock from './pages/BloodStock'
+import AdminRequests from './pages/AdminRequests'
 import BloodGroups from './pages/BloodGroups'
 import Emergency from './pages/Emergency'
 import About from './pages/About'
@@ -39,6 +40,7 @@ export default function App() {
         <Route path={ROUTES['donor-mgmt']} element={<AdminRoute><DonorManagement /></AdminRoute>} />
         <Route path={ROUTES['add-donor']} element={<AdminRoute><AddDonor /></AdminRoute>} />
         <Route path={ROUTES['stock']} element={<AdminRoute><BloodStock /></AdminRoute>} />
+        <Route path={ROUTES['admin-requests']} element={<AdminRoute><AdminRequests /></AdminRoute>} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

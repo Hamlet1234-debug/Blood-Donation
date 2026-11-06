@@ -11,6 +11,7 @@ export const ROUTES = {
   'donor-mgmt': '/admin/donors',
   'add-donor': '/admin/add-donor',
   'stock': '/admin/stock',
+  'admin-requests': '/admin/requests',
   'donor-stock': '/blood-groups',
   'emergency': '/emergency',
   'about': '/about',
