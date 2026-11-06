@@ -1,97 +1,166 @@
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
-import { ROUTES } from '../routes'
+import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabase'
+import DonorLayout from '../components/DonorLayout'
+import { showBlood, initials, fmtDate, nextEligible } from '../lib/utils'
+
+const toForm = (p) => ({
+  full_name: p.full_name ?? '',
+  father_name: p.father_name ?? '',
+  mother_name: p.mother_name ?? '',
+  blood_group: p.blood_group ?? '',
+  antigen: p.antigen ?? '',
+  antibody: p.antibody ?? '',
+  phone: p.phone ?? '',
+  city: p.city ?? '',
+  address: p.address ?? '',
+  last_donated: p.last_donated ?? '',
+})
 
 export default function MyProfile() {
-  const navigate = useNavigate()
   const { showToast } = useApp()
-  const go = (page) => { navigate(ROUTES[page]); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+  const { user, profile, refreshProfile } = useAuth()
+
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState(null)
+  const [donations, setDonations] = useState([])
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!profile) return
+    setForm(toForm(profile))
+    supabase.from('donations').select('*').eq('profile_id', profile.id)
+      .order('donated_on', { ascending: false })
+      .then(({ data }) => setDonations(data ?? []))
+  }, [profile])
+
+  if (!profile || !form) {
+    return <DonorLayout active="my-profile"><div className="card">Profile paoa jay nai. Abar login koro.</div></DonorLayout>
+  }
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
+  const elig = nextEligible(profile.last_donated)
+
+  const cancel = () => { setForm(toForm(profile)); setEditing(false) }
+
+  const save = async () => {
+    if (!form.full_name.trim() || !form.phone.trim() || !form.city.trim())
+      return showToast('Name, phone ar city dewa lagbe', 'error')
+    if (!/^01\d{9}$/.test(form.phone.trim()))
+      return showToast('Phone number 01XXXXXXXXX format e dao', 'error')
+
+    setBusy(true)
+    const { error } = await supabase.from('profiles').update({
+      full_name: form.full_name.trim(),
+      father_name: form.father_name.trim(),
+      mother_name: form.mother_name.trim(),
+      blood_group: form.blood_group,
+      antigen: form.antigen.trim(),
+      antibody: form.antibody.trim(),
+      phone: form.phone.trim(),
+      city: form.city.trim(),
+      address: form.address.trim(),
+      last_donated: form.last_donated || null,
+    }).eq('user_id', user.id)
+    setBusy(false)
+    if (error) return showToast(error.message, 'error')
+    await refreshProfile()
+    setEditing(false)
+    showToast('Profile updated!')
+  }
+
+  // text na input, editing mode onujayi
+  const field = (label, key, opts = {}) => (
+    <div className="info-block" style={opts.full ? { gridColumn: '1/-1' } : undefined}>
+        <div className="info-block-label">{label}</div>
+        <div className="info-block-value">
+            {editing
+              ? <input className="form-input" type={opts.type ?? 'text'} value={form[key]} onChange={set(key)} />
+              : (opts.type === 'date' ? fmtDate(profile[key]) : (profile[key] || '-'))}
+        </div>
+    </div>
+  )
 
   return (
-    <div className="page">
-      <div className="screen">
-          <nav className="navbar">
-              <a href="#" className="nav-logo" onClick={(e) => { e.preventDefault(); go('home') }}><div className="nav-logo-icon">LS</div><div className="nav-logo-text"><span>Life</span>Saver</div></a>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                  <span className="badge badge-red">A+</span>
-                  <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--gray-800)' }}>Hamlet Mondal</span>
-                  <button className="btn btn-gray btn-sm" onClick={() => go('home')}>Logout</button>
+    <DonorLayout active="my-profile">
+      <div className="profile-hero">
+          <div className="profile-avatar-large">{initials(profile.full_name)}</div>
+          <div className="profile-hero-info">
+              <h2>{profile.full_name}</h2>
+              <p>Registered Blood Donor · Member since {fmtDate(profile.created_at)}</p>
+              <div className="profile-hero-meta">
+                  <span className="badge badge-red">{showBlood(profile.blood_group)} Blood Group</span>
+                  <span className={'badge ' + (profile.is_available ? 'badge-green' : 'badge-gray')}>{profile.is_available ? '✓ Active Donor' : 'Paused'}</span>
+                  <span className="badge badge-blue">{donations.length} Donations</span>
               </div>
-          </nav>
-          <div className="dashboard-layout">
-              <div className="sidebar">
-                  <div className="sidebar-logo"><span><b>Life</b>Saver</span></div>
-                  <div className="sidebar-section-label">Menu</div>
-                  <div className="sidebar-item" data-page="donor-dash" onClick={() => go('donor-dash')}><span className="sidebar-icon">•</span> Dashboard</div>
-                  <div className="sidebar-item active" data-page="my-profile"><span className="sidebar-icon">•</span> My Profile</div>
-                  <div className="sidebar-item" data-page="search" onClick={() => go('search')}><span className="sidebar-icon">•</span> Search Donors</div>
-                  <div className="sidebar-item" data-page="donor-stock" onClick={() => go('donor-stock')}><span className="sidebar-icon">•</span> Blood Stock</div>
-                  <div className="sidebar-item" data-page="emergency" onClick={() => go('emergency')}><span className="sidebar-icon">•</span> Emergency Request</div>
-                  <div className="sidebar-section-label" style={{ marginTop: '20px' }}>Account</div>
-                  <div className="sidebar-item" data-page="settings" onClick={() => go('settings')}><span className="sidebar-icon">•</span> Settings</div>
-                  <div className="sidebar-item" onClick={() => go('home')}><span className="sidebar-icon">•</span> Logout</div>
+          </div>
+          {!editing
+            ? <button className="btn btn-white btn-lg" onClick={() => setEditing(true)}>✏️ Edit Profile</button>
+            : <div style={{ display: 'flex', gap: '8px' }}>
+                  <button className="btn btn-white btn-lg" onClick={save} disabled={busy}>{busy ? 'Saving...' : '💾 Save'}</button>
+                  <button className="btn btn-gray btn-lg" onClick={cancel} disabled={busy}>Cancel</button>
+              </div>}
+      </div>
+
+      <div className="card">
+          <div className="card-title">Personal Information</div>
+          <div className="info-grid">
+              {field('Full Name', 'full_name')}
+              {field("Father's Name", 'father_name')}
+              {field("Mother's Name", 'mother_name')}
+          </div>
+      </div>
+
+      <div className="card">
+          <div className="card-title">Blood &amp; Medical Information</div>
+          <div className="info-grid">
+              <div className="info-block">
+                  <div className="info-block-label">Blood Group</div>
+                  <div className="info-block-value">
+                      {editing ? (
+                        <select className="form-select" value={form.blood_group} onChange={set('blood_group')}>
+                            {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map((g) => <option key={g} value={g}>{showBlood(g)}</option>)}
+                        </select>
+                      ) : <span className="badge badge-red">{showBlood(profile.blood_group)}</span>}
+                  </div>
               </div>
-              <div className="dashboard-main">
-                  <div className="profile-hero">
-                      <div className="profile-avatar-large">HM</div>
-                      <div className="profile-hero-info">
-                          <h2>Hamlet Mondal</h2>
-                          <p>Registered Blood Donor · Member since January 2024</p>
-                          <div className="profile-hero-meta">
-                              <span className="badge badge-red">A+ Blood Group</span>
-                              <span className="badge badge-green">✓ Active Donor</span>
-                              <span className="badge badge-blue">8 Donations</span>
-                          </div>
-                      </div>
-                      <button className="btn btn-white btn-lg" onClick={() => showToast("Profile edit mode opened", "success")}>✏️ Edit Profile</button>
-                  </div>
-                  <div className="card">
-                      <div className="card-title">Personal Information <span className="action-link" onClick={() => showToast("Edit personal info", "success")}>Edit</span></div>
-                      <div className="info-grid">
-                          <div className="info-block"><div className="info-block-label">Full Name</div><div className="info-block-value">Hamlet Mondal</div></div>
-                          <div className="info-block"><div className="info-block-label">Father's Name</div><div className="info-block-value">Md. Abdul Mondal</div></div>
-                          <div className="info-block"><div className="info-block-label">Mother's Name</div><div className="info-block-value">Mrs. Rahima Khatun</div></div>
-                          <div className="info-block"><div className="info-block-label">Date of Birth</div><div className="info-block-value">15 March 2003</div></div>
-                          <div className="info-block"><div className="info-block-label">Gender</div><div className="info-block-value">Male</div></div>
-                          <div className="info-block"><div className="info-block-label">National ID</div><div className="info-block-value">•••• •••• 5678</div></div>
-                      </div>
-                  </div>
-                  <div className="card">
-                      <div className="card-title">Blood &amp; Medical Information <span className="action-link" onClick={() => showToast("Edit medical info", "success")}>Edit</span></div>
-                      <div className="info-grid">
-                          <div className="info-block"><div className="info-block-label">Blood Group</div><div className="info-block-value"><span className="badge badge-red">A+</span></div></div>
-                          <div className="info-block"><div className="info-block-label">Antigen</div><div className="info-block-value">Positive</div></div>
-                          <div className="info-block"><div className="info-block-label">Antibody</div><div className="info-block-value">Anti-B</div></div>
-                          <div className="info-block"><div className="info-block-label">Weight</div><div className="info-block-value">72 kg</div></div>
-                          <div className="info-block"><div className="info-block-label">Last Donation Date</div><div className="info-block-value">18 August 2026</div></div>
-                          <div className="info-block"><div className="info-block-label">Next Eligible Date</div><div className="info-block-value" style={{ color: 'var(--green)' }}>18 October 2026</div></div>
-                      </div>
-                  </div>
-                  <div className="card">
-                      <div className="card-title">Contact Information <span className="action-link" onClick={() => showToast("Edit contact info", "success")}>Edit</span></div>
-                      <div className="info-grid">
-                          <div className="info-block"><div className="info-block-label">Email Address</div><div className="info-block-value">hamlet.mondal@gmail.com</div></div>
-                          <div className="info-block"><div className="info-block-label">Phone Number</div><div className="info-block-value">01712345678</div></div>
-                          <div className="info-block"><div className="info-block-label">Alternative Phone</div><div className="info-block-value">01987654321</div></div>
-                          <div className="info-block"><div className="info-block-label">City / District</div><div className="info-block-value">Khulna</div></div>
-                          <div className="info-block"><div className="info-block-label">Area / Upazila</div><div className="info-block-value">Sonadanga</div></div>
-                          <div className="info-block"><div className="info-block-label">Postal Code</div><div className="info-block-value">9100</div></div>
-                          <div className="info-block" style={{ gridColumn: '1/-1' }}><div className="info-block-label">Full Address</div><div className="info-block-value">House 12, Road 5, Sonadanga, Khulna - 9100</div></div>
-                      </div>
-                  </div>
-                  <div className="card">
-                      <div className="card-title">Complete Donation History</div>
-                      <div className="donation-list">
-                          <div className="donation-item"><div className="donation-icon">❤</div><div className="donation-details"><div className="donation-title">Khulna Medical College Hospital</div><div className="donation-meta">18 Aug 2026 · 1 unit · Emergency Response</div></div><span className="donation-badge">Completed</span></div>
-                          <div className="donation-item"><div className="donation-icon">❤</div><div className="donation-details"><div className="donation-title">Life Saver Central Blood Bank</div><div className="donation-meta">12 Jun 2026 · 1 unit · Routine Donation</div></div><span className="donation-badge">Completed</span></div>
-                          <div className="donation-item"><div className="donation-icon">❤</div><div className="donation-details"><div className="donation-title">Sonadanga Blood Center</div><div className="donation-meta">05 Apr 2026 · 1 unit · Routine Donation</div></div><span className="donation-badge">Completed</span></div>
-                          <div className="donation-item"><div className="donation-icon">❤</div><div className="donation-details"><div className="donation-title">Gazi Medical Hospital</div><div className="donation-meta">20 Jan 2026 · 1 unit · Emergency Response</div></div><span className="donation-badge">Completed</span></div>
-                          <div className="donation-item"><div className="donation-icon">❤</div><div className="donation-details"><div className="donation-title">Khulna Red Crescent</div><div className="donation-meta">14 Nov 2025 · 1 unit · Routine Donation</div></div><span className="donation-badge">Completed</span></div>
-                      </div>
-                  </div>
+              {field('Antigen', 'antigen')}
+              {field('Antibody', 'antibody')}
+              {field('Last Donation Date', 'last_donated', { type: 'date' })}
+              <div className="info-block">
+                  <div className="info-block-label">Next Eligible Date</div>
+                  <div className="info-block-value" style={{ color: 'var(--green)' }}>{elig.date ? fmtDate(elig.date) : 'Eligible now'}</div>
               </div>
           </div>
       </div>
-    </div>
+
+      <div className="card">
+          <div className="card-title">Contact Information</div>
+          <div className="info-grid">
+              <div className="info-block"><div className="info-block-label">Email Address</div><div className="info-block-value">{profile.email || user?.email}</div></div>
+              {field('Phone Number', 'phone')}
+              {field('City / District', 'city')}
+              {field('Full Address', 'address', { full: true })}
+          </div>
+      </div>
+
+      <div className="card">
+          <div className="card-title">Complete Donation History</div>
+          <div className="donation-list">
+              {donations.length === 0 && <p style={{ fontSize: '14px' }}>Ekhono kono donation record nai.</p>}
+              {donations.map((d) => (
+                <div className="donation-item" key={d.id}>
+                    <div className="donation-icon">❤</div>
+                    <div className="donation-details">
+                        <div className="donation-title">{d.place || 'Blood donation'}</div>
+                        <div className="donation-meta">{fmtDate(d.donated_on)}{d.note ? ` · ${d.note}` : ''}</div>
+                    </div>
+                    <span className="donation-badge">Completed</span>
+                </div>
+              ))}
+          </div>
+      </div>
+    </DonorLayout>
   )
 }
