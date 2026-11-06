@@ -1,194 +1,157 @@
-import { useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
-import { ROUTES } from '../routes'
+import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabase'
+import DonorLayout from '../components/DonorLayout'
 
 export default function Settings() {
-  const navigate = useNavigate()
   const { showToast } = useApp()
-  const go = (page) => { navigate(ROUTES[page]); window.scrollTo({ top: 0, behavior: 'smooth' }) }
+  const { user, profile, refreshProfile } = useAuth()
 
-  const confirmDeleteAccount = () => {
-    if (window.confirm('⚠️ WARNING: This will permanently delete your account and all associated data.\n\nThis action CANNOT be undone.\n\nAre you absolutely sure?')) {
-      showToast('Account deletion requires super-admin approval', 'error')
+  const [phone, setPhone] = useState('')
+  const [available, setAvailable] = useState('true')
+  const [pw, setPw] = useState({ current: '', next: '', confirm: '' })
+  const [busy, setBusy] = useState('')
+
+  useEffect(() => {
+    if (!profile) return
+    setPhone(profile.phone ?? '')
+    setAvailable(String(profile.is_available))
+  }, [profile])
+
+  if (!profile) {
+    return <DonorLayout active="settings"><div className="card">Profile paoa jay nai. Abar login koro.</div></DonorLayout>
+  }
+
+  const updateProfile = async (changes, successMsg, key) => {
+    setBusy(key)
+    const { error } = await supabase.from('profiles').update(changes).eq('user_id', user.id)
+    setBusy('')
+    if (error) return showToast(error.message, 'error')
+    await refreshProfile()
+    showToast(successMsg)
+  }
+
+  const savePhone = () => {
+    if (!/^01\d{9}$/.test(phone.trim())) return showToast('Phone number 01XXXXXXXXX format e dao', 'error')
+    updateProfile({ phone: phone.trim() }, 'Phone number updated', 'phone')
+  }
+
+  const saveAvailability = () =>
+    updateProfile({ is_available: available === 'true' }, 'Availability updated', 'avail')
+
+  const changePassword = async () => {
+    if (!pw.current || !pw.next) return showToast('Shob field puron koro', 'error')
+    if (pw.next.length < 6) return showToast('New password komopokkhe 6 character', 'error')
+    if (pw.next !== pw.confirm) return showToast('New password mile nai', 'error')
+
+    setBusy('pw')
+    const { error: e1 } = await supabase.auth.signInWithPassword({ email: user.email, password: pw.current })
+    if (e1) {
+      setBusy('')
+      return showToast('Current password thik na', 'error')
+    }
+    const { error } = await supabase.auth.updateUser({ password: pw.next })
+    setBusy('')
+    if (error) return showToast(error.message, 'error')
+    setPw({ current: '', next: '', confirm: '' })
+    showToast('Password changed successfully')
+  }
+
+  const deactivate = () => {
+    if (window.confirm('Account deactivate korle tumi search e dekha jabe na. Cholbe?')) {
+      updateProfile({ is_available: false }, 'Account deactivated (availability off)', 'deact')
+    }
+  }
+
+  const confirmDelete = () => {
+    if (window.confirm('Account permanently delete korte admin er sathe jogajog korte hobe. Ok?')) {
+      showToast('Account delete korte admin ke bolo', 'error')
     }
   }
 
   return (
-    <div className="page">
-      <div className="screen">
-          <nav className="navbar">
-              <a href="#" className="nav-logo" onClick={(e) => { e.preventDefault(); go('home') }}><div className="nav-logo-icon">LS</div><div className="nav-logo-text"><span>Life</span>Saver</div></a>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-                  <span className="badge badge-red">A+</span>
-                  <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--gray-800)' }}>Hamlet Mondal</span>
-                  <button className="btn btn-gray btn-sm" onClick={() => go('home')}>Logout</button>
+    <DonorLayout active="settings">
+      <div className="dash-header">
+          <h2>Account Settings ⚙️</h2>
+          <p>Manage your account preferences and security</p>
+      </div>
+
+      <div className="card">
+          <div className="settings-section">
+              <div className="settings-section-title">👤 Account Information</div>
+              <div className="settings-section-desc">Email change kora jay na. Phone number update korte paro.</div>
+              <div className="form-row">
+                  <div className="form-group">
+                      <label className="form-label">Email Address</label>
+                      <input type="email" className="form-input" value={user?.email ?? ''} disabled />
+                  </div>
+                  <div className="form-group">
+                      <label className="form-label">Phone Number</label>
+                      <input type="tel" className="form-input" value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  </div>
               </div>
-          </nav>
-          <div className="dashboard-layout">
-              <div className="sidebar">
-                  <div className="sidebar-logo"><span><b>Life</b>Saver</span></div>
-                  <div className="sidebar-section-label">Menu</div>
-                  <div className="sidebar-item" data-page="donor-dash" onClick={() => go('donor-dash')}><span className="sidebar-icon">•</span> Dashboard</div>
-                  <div className="sidebar-item" data-page="my-profile" onClick={() => go('my-profile')}><span className="sidebar-icon">•</span> My Profile</div>
-                  <div className="sidebar-item" data-page="search" onClick={() => go('search')}><span className="sidebar-icon">•</span> Search Donors</div>
-                  <div className="sidebar-item" data-page="donor-stock" onClick={() => go('donor-stock')}><span className="sidebar-icon">•</span> Blood Stock</div>
-                  <div className="sidebar-item" data-page="emergency" onClick={() => go('emergency')}><span className="sidebar-icon">•</span> Emergency Request</div>
-                  <div className="sidebar-section-label" style={{ marginTop: '20px' }}>Account</div>
-                  <div className="sidebar-item active" data-page="settings"><span className="sidebar-icon">•</span> Settings</div>
-                  <div className="sidebar-item" onClick={() => go('home')}><span className="sidebar-icon">•</span> Logout</div>
+              <button className="btn btn-primary" onClick={savePhone} disabled={busy === 'phone'}>{busy === 'phone' ? 'Saving...' : 'Save Changes'}</button>
+          </div>
+      </div>
+
+      <div className="card">
+          <div className="settings-section">
+              <div className="settings-section-title">🩸 Availability</div>
+              <div className="settings-section-desc">Paused korle tumi donor search ar emergency match e dekha jabe na</div>
+              <div className="form-group">
+                  <label className="form-label">Availability Status</label>
+                  <select className="form-select" value={available} onChange={(e) => setAvailable(e.target.value)}>
+                      <option value="true">Active — Available for donation</option>
+                      <option value="false">Temporarily Unavailable</option>
+                  </select>
               </div>
-              <div className="dashboard-main">
-                  <div className="dash-header">
-                      <h2>Account Settings ⚙️</h2>
-                      <p>Manage your account preferences, security, and notifications</p>
+              <button className="btn btn-primary" onClick={saveAvailability} disabled={busy === 'avail'}>{busy === 'avail' ? 'Saving...' : 'Save Availability'}</button>
+          </div>
+      </div>
+
+      <div className="card">
+          <div className="settings-section">
+              <div className="settings-section-title">🔒 Change Password</div>
+              <div className="settings-section-desc">Keep your account secure with a strong password</div>
+              <div className="form-group">
+                  <label className="form-label">Current Password</label>
+                  <input type="password" className="form-input" placeholder="Enter current password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} />
+              </div>
+              <div className="form-row">
+                  <div className="form-group">
+                      <label className="form-label">New Password</label>
+                      <input type="password" className="form-input" placeholder="Enter new password" value={pw.next} onChange={(e) => setPw({ ...pw, next: e.target.value })} />
                   </div>
-                  <div className="card">
-                      <div className="settings-section">
-                          <div className="settings-section-title">👤 Account Information</div>
-                          <div className="settings-section-desc">Update your basic account details</div>
-                          <div className="form-row">
-                              <div className="form-group">
-                                  <label className="form-label">Email Address</label>
-                                  <input type="email" className="form-input" defaultValue="hamlet.mondal@gmail.com" />
-                              </div>
-                              <div className="form-group">
-                                  <label className="form-label">Phone Number</label>
-                                  <input type="tel" className="form-input" defaultValue="01712345678" />
-                              </div>
-                          </div>
-                          <button className="btn btn-primary" onClick={() => showToast("Account information updated successfully", "success")}>Save Changes</button>
-                      </div>
+                  <div className="form-group">
+                      <label className="form-label">Confirm New Password</label>
+                      <input type="password" className="form-input" placeholder="Repeat new password" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} />
                   </div>
-                  <div className="card">
-                      <div className="settings-section">
-                          <div className="settings-section-title">🔒 Change Password</div>
-                          <div className="settings-section-desc">Keep your account secure with a strong password</div>
-                          <div className="form-group">
-                              <label className="form-label">Current Password</label>
-                              <input type="password" className="form-input" placeholder="Enter current password" />
-                          </div>
-                          <div className="form-row">
-                              <div className="form-group">
-                                  <label className="form-label">New Password</label>
-                                  <input type="password" className="form-input" placeholder="Enter new password" />
-                              </div>
-                              <div className="form-group">
-                                  <label className="form-label">Confirm New Password</label>
-                                  <input type="password" className="form-input" placeholder="Repeat new password" />
-                              </div>
-                          </div>
-                          <button className="btn btn-primary" onClick={() => showToast("Password changed successfully", "success")}>Update Password</button>
-                      </div>
+              </div>
+              <button className="btn btn-primary" onClick={changePassword} disabled={busy === 'pw'}>{busy === 'pw' ? 'Please wait...' : 'Update Password'}</button>
+          </div>
+      </div>
+
+      <div className="card" style={{ borderColor: '#FECACA', background: '#FFF5F5' }}>
+          <div className="settings-section">
+              <div className="settings-section-title" style={{ color: '#DC2626' }}>⚠️ Danger Zone</div>
+              <div className="settings-section-desc">Irreversible actions — proceed with caution</div>
+              <div className="settings-row">
+                  <div className="settings-row-info">
+                      <div className="settings-row-label">Deactivate Account</div>
+                      <div className="settings-row-desc">Search theke hide hoye jabe. Pore Availability theke abar Active korte paro.</div>
                   </div>
-                  <div className="card">
-                      <div className="settings-section">
-                          <div className="settings-section-title">🔔 Notification Preferences</div>
-                          <div className="settings-section-desc">Choose how you want to be notified about important updates</div>
-                          <div className="settings-row">
-                              <div className="settings-row-info">
-                                  <div className="settings-row-label">Emergency Blood Requests</div>
-                                  <div className="settings-row-desc">Get notified when your blood group is needed nearby</div>
-                              </div>
-                              <label className="toggle-switch"><input type="checkbox" defaultChecked /><span className="toggle-slider"></span></label>
-                          </div>
-                          <div className="settings-row">
-                              <div className="settings-row-info">
-                                  <div className="settings-row-label">Email Notifications</div>
-                                  <div className="settings-row-desc">Receive important updates via email</div>
-                              </div>
-                              <label className="toggle-switch"><input type="checkbox" defaultChecked /><span className="toggle-slider"></span></label>
-                          </div>
-                          <div className="settings-row">
-                              <div className="settings-row-info">
-                                  <div className="settings-row-label">SMS Alerts</div>
-                                  <div className="settings-row-desc">Get text messages for urgent requests</div>
-                              </div>
-                              <label className="toggle-switch"><input type="checkbox" /><span className="toggle-slider"></span></label>
-                          </div>
-                          <div className="settings-row">
-                              <div className="settings-row-info">
-                                  <div className="settings-row-label">Donation Reminders</div>
-                                  <div className="settings-row-desc">Reminders when you become eligible to donate again</div>
-                              </div>
-                              <label className="toggle-switch"><input type="checkbox" defaultChecked /><span className="toggle-slider"></span></label>
-                          </div>
-                      </div>
+                  <button className="btn btn-gray" onClick={deactivate}>Deactivate</button>
+              </div>
+              <div className="settings-row">
+                  <div className="settings-row-info">
+                      <div className="settings-row-label">Delete Account</div>
+                      <div className="settings-row-desc">Permanent delete korte admin er sathe jogajog koro.</div>
                   </div>
-                  <div className="card">
-                      <div className="settings-section">
-                          <div className="settings-section-title">🛡️ Privacy Settings</div>
-                          <div className="settings-section-desc">Control who can see your profile information</div>
-                          <div className="settings-row">
-                              <div className="settings-row-info">
-                                  <div className="settings-row-label">Profile Visibility</div>
-                                  <div className="settings-row-desc">Allow other users to find your profile</div>
-                              </div>
-                              <label className="toggle-switch"><input type="checkbox" defaultChecked /><span className="toggle-slider"></span></label>
-                          </div>
-                          <div className="settings-row">
-                              <div className="settings-row-info">
-                                  <div className="settings-row-label">Show Phone Number</div>
-                                  <div className="settings-row-desc">Display your phone number on your public profile</div>
-                              </div>
-                              <label className="toggle-switch"><input type="checkbox" defaultChecked /><span className="toggle-slider"></span></label>
-                          </div>
-                          <div className="settings-row">
-                              <div className="settings-row-info">
-                                  <div className="settings-row-label">Show Email Address</div>
-                                  <div className="settings-row-desc">Display your email on your public profile</div>
-                              </div>
-                              <label className="toggle-switch"><input type="checkbox" /><span className="toggle-slider"></span></label>
-                          </div>
-                      </div>
-                  </div>
-                  <div className="card">
-                      <div className="settings-section">
-                          <div className="settings-section-title">🎨 Display &amp; Preferences</div>
-                          <div className="settings-section-desc">Customize your experience</div>
-                          <div className="form-row">
-                              <div className="form-group">
-                                  <label className="form-label">Language</label>
-                                  <select className="form-select" defaultValue="English"><option>English</option><option>বাংলা (Bangla)</option></select>
-                              </div>
-                              <div className="form-group">
-                                  <label className="form-label">Time Zone</label>
-                                  <select className="form-select" defaultValue="Dhaka (GMT+6)"><option>Dhaka (GMT+6)</option><option>Kolkata (GMT+5:30)</option></select>
-                              </div>
-                          </div>
-                          <div className="form-group">
-                              <label className="form-label">Availability Status</label>
-                              <select className="form-select" defaultValue="Active — Available for donation">
-                                  <option>Active — Available for donation</option>
-                                  <option>Temporarily Unavailable</option>
-                                  <option>Inactive</option>
-                              </select>
-                          </div>
-                          <button className="btn btn-primary" onClick={() => showToast("Preferences saved successfully", "success")}>Save Preferences</button>
-                      </div>
-                  </div>
-                  <div className="card" style={{ borderColor: '#FECACA', background: '#FFF5F5' }}>
-                      <div className="settings-section">
-                          <div className="settings-section-title" style={{ color: '#DC2626' }}>⚠️ Danger Zone</div>
-                          <div className="settings-section-desc">Irreversible actions — proceed with caution</div>
-                          <div className="settings-row">
-                              <div className="settings-row-info">
-                                  <div className="settings-row-label">Deactivate Account</div>
-                                  <div className="settings-row-desc">Temporarily disable your account. You can reactivate anytime.</div>
-                              </div>
-                              <button className="btn btn-gray" onClick={() => showToast("Account deactivation requires admin approval", "error")}>Deactivate</button>
-                          </div>
-                          <div className="settings-row">
-                              <div className="settings-row-info">
-                                  <div className="settings-row-label">Delete Account</div>
-                                  <div className="settings-row-desc">Permanently delete your account and all associated data.</div>
-                              </div>
-                              <button className="btn btn-danger" onClick={confirmDeleteAccount}>Delete Account</button>
-                          </div>
-                      </div>
-                  </div>
+                  <button className="btn btn-danger" onClick={confirmDelete}>Delete Account</button>
               </div>
           </div>
       </div>
-    </div>
+    </DonorLayout>
   )
 }
